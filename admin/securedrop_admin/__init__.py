@@ -530,6 +530,60 @@ def get_logs(args):
     sdlog.info("Encrypt logs and send to securedrop@freedom.press or upload "
                "to the SecureDrop support portal.")
 
+def signal_register(args):
+    """Register signal-cli to send ossec alerts to administrators"""
+    sdlog.info("Beginning signal-cli enrollment")
+    phone_number = raw_input("Enter number to enroll for sending alerts (e.g.: +15555555555): ")
+    if not re.match('^\\+[0-9]+$', phone_number):
+        sdlog.info("Invalid phone number or format.")
+        return 0
+    else:
+        sdlog.info("Initiating signal-cli registration flow with number {}.".format(phone_number))
+        sc = SiteConfig(args).load()
+        ssh_connect = "{}@{}".format(sc.get('ssh_users'), "mon")
+        ssh_command = "sudo -u ossec bash -c 'signal-cli --config /etc/signal/ -u {} register'".format(phone_number)
+        out = subprocess.check_output(['ssh', ssh_connect, ssh_command], cwd=args.root)
+        sdlog.info(out)
+        verification_code="x"
+        while(not re.match('^[0-9]{6}$', verification_code)):
+            verification_code = raw_input("Please enter the signal verification code(e.g.: 123456): ")
+            if re.match('^[0-9]{6}$', verification_code):
+                ssh_command = "sudo -u ossec bash -c 'signal-cli --config /etc/signal/ -u {} verify {}'".format(phone_number, verification_code)
+                out = subprocess.check_output(['ssh', ssh_connect, ssh_command], cwd=args.root)
+                sdlog.info(out)
+                sdlog.info("Verification code {} sent to server.".format(verification_code))
+                test_number = raw_input("Enter signal number to receive a test alert (e.g.: +15555555555): ")
+                if not re.match('^\\+[0-9]+$', test_number):
+                    sdlog.info("Invalid phone number or phone number format.")
+                    return 0
+                else:
+                    ssh_command = "sudo -u ossec bash -c 'signal-cli --config /etc/signal/ -u {} send -m \"This is a test message!\" {}'".format(phone_number, test_number)
+                    out = subprocess.check_output(['ssh', ssh_connect, ssh_command], cwd=args.root)
+                    sdlog.info(out)
+                    sdlog.info("Test message sent to {}.".format(test_number))
+                    ssh_command = "sudo -u ossec bash -c 'signal-cli --config /etc/signal -u {} listIdentities -n {}'".format(phone_number, test_number)
+                    out = subprocess.check_output(['ssh', ssh_connect, ssh_command], cwd=args.root)
+                    sdlog.info(out)
+                    safety_number = re.match('[0-9 ]{72}', out)
+                    sdlog.info("Please ensure safety number for {} is {} and mark as verified.".format(phone_number, safety_number))
+                    sdlog.info("Signal-cli registration completed.")
+            else:
+                sdlog.info("Incorrect verification code: must be 6 digits (e.g.: 123456)")
+
+def signal_backup(args):
+    """Backups up signal configuration for adminstrators"""
+    phone_number = raw_input("Enter signal number that is sending alerts (e.g.: +15555555555):")
+    if not re.match('^\\+[0-9]+$', phone_number):
+        sdlog.info("Invalid phone number or phone number format.")
+        return 0
+    else:
+        sc = SiteConfig(args).load()
+        ssh_connect = "{}@{}".format(sc.get('ssh_users'), "mon")
+        ssh_command = "sudo cat /etc/signal/data/{}".format(phone_number)
+        #print(['ssh', ssh_connect, ssh_command, ">", phone_number])
+        out = subprocess.check_output(['ssh', ssh_connect, ssh_command], cwd=args.root)
+        print out
+        #TODO: savetofile
 
 def set_default_paths(args):
     if not args.ansible_path:
@@ -564,6 +618,7 @@ def parse_argv(argv):
                         help="path to the Ansible root")
     parser.add_argument('--app-path',
                         help="path to the SecureDrop application root")
+
     subparsers = parser.add_subparsers()
 
     parse_sdconfig = subparsers.add_parser('sdconfig', help=sdconfig.__doc__)
@@ -597,6 +652,13 @@ def parse_argv(argv):
                                        help=get_logs.__doc__)
     parse_logs.set_defaults(func=get_logs)
 
+    parse_signal_register = subparsers.add_parser('signal_register',
+					       help=signal_register.__doc__)
+    parse_signal_register.set_defaults(func=signal_register)
+
+    parse_signal_backup = subparsers.add_parser('signal_backup',
+                                               help=signal_backup.__doc__)
+    parse_signal_backup.set_defaults(func=signal_backup)
     return set_default_paths(parser.parse_args(argv))
 
 
