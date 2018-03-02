@@ -39,7 +39,7 @@ recommend the following resources:
       this book, you need to become a `pfSense Gold
       Member <https://www.pfsense.org/our-services/gold-membership.html>`__.
 
-If you're using the recommended SG-2440 firewall, then you may find the
+If you're using the recommended SG-4860 firewall, then you may find the
 following resources useful:
 
 -  `SG-4860
